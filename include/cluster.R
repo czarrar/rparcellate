@@ -126,6 +126,27 @@ cluster.valid.modsilhouette = function(dist.mat, vec.k) {
     return(msilw)
 }
 
+# Computes the modularity (Q)
+## code is based on brain connectivity toolbox (http://www.brain-connectivity-toolbox.net/)
+##
+## Arguments
+## - A: weighted undirected network (adjacency or weights)...i.e. similarity matrix
+## - p: partition labels
+## Return
+## - Q: modularity score
+##
+## References: Newman (2006) -- Phys Rev E 74:036104; PNAS 23:8577-8582.
+cluster.valid.modularity = function(A, p) {
+    K = apply(A, 2, sum)
+    N = length(p)
+    m = sum(K)
+    B = A - (K %*% t(K))/m
+    s = matrix(rep(p, times=N), N, N)
+    Q = ((!(s-t(s)))*1) * B/m
+    Q = sum(Q)
+    return(Q)
+}
+
 # ---------------------------------------
 # CLUSTERING DISTANCE/CONSISTENCY METRICS
 # ---------------------------------------
