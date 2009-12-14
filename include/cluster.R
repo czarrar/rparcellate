@@ -1,4 +1,9 @@
+# ---------------------
+# CLUSTERING ALGORITHMS
+# ---------------------
+
 cluster.kmeans = function(x, centers, iter.max=200, nstart=20, algorithm="Hartigan-Wong") {
+    library(cluster)
     return(kmeans(x, centers, iter.max, nstart, algorithm))
 }
 
@@ -49,6 +54,30 @@ cluster.spectral = function(S, ks) {
     return(list(clusters=specc.solutions, eigval=eig$values, eigvec=eig$vectors))
 }
 
+# ---------------------
+# CLUSTERING VALIDATION
+# ---------------------
+
+cluster.valid.r2 = function(dist.mat, clusters.mat) {
+    library(vegan)
+    
+    num.regions = nrow(clusters.mat)
+    num.solutions = ncol(clusters.mat)
+    
+    vec.r2 = c()
+    
+    for (kk in 1:num.solutions) {
+        tmp.adonis = adonis(as.dist(dist.mat) ~ as.factor(clusters.mat[,kk]), permutations=1)
+        vec.r2[kk] = tmp.adonis$aov.tab$R2[1]
+    }
+    
+    return(vec.r2)
+}
+
+# ---------------------------------------
+# CLUSTERING DISTANCE/CONSISTENCY METRICS
+# ---------------------------------------
+
 # Function to use with VI distance
 logg = function(mmm) {
     logm = log(mmm)
@@ -56,7 +85,7 @@ logg = function(mmm) {
     return(logm)
 }
 
-cluster.vidist = function(mem1, mem2, norm=F) {
+cluster.dist.vi = function(mem1, mem2, norm=F) {
     nn = length(mem1)
     if (length(mem2) != nn) stop('Need same number of vertices in each
     partition.')
@@ -75,11 +104,17 @@ cluster.vidist = function(mem1, mem2, norm=F) {
     varinf
 }
 
-cluster.cramersv = function(vec1, vec2) {
+cluster.dist.cramersv = function(vec1, vec2) {
     library(vcd)
     tab = table(vec1, vec2)
     return(assocstats(tab)$cramer)
 }
+
+
+# ----------------------
+# CLUSTERING OTHER STUFF
+# ----------------------
+
 
 ###
 # Match 2 different cluster memberships
