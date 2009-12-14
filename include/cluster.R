@@ -74,6 +74,58 @@ cluster.valid.r2 = function(dist.mat, clusters.mat) {
     return(vec.r2)
 }
 
+# Computes a modified silhouette width for each cluster solution
+# (based on code from Clare Kelly at med nyu edu)
+##
+## S(i) = (min(AVGD_BETWEEN(i,k)) - AVGD_WITHIN(i)) / max(AVGD_WITHIN(i), min(AVGD_BETWEEN(i,k)))
+## where AVGD_WITHIN(i) is the average distance from the i-th point to the
+## other points in its own cluster, and AVGD_BETWEEN(i,k) is the average
+## distance from the i-th point to points in another cluster k.
+##
+## Arguments
+## - dist.mat: distance matrix
+## - vec.k: vector of k partitions of dist.mat (k>1 and is integer)
+## Return
+## - vector containing silhoette width values (one for each cluster)
+cluster.valid.modsilhouette = function(dist.mat, vec.k) {
+    dist.mat = as.matrix(dist.mat)
+    num.regions = rownames(dist.mat)
+    ks = unique(vec.k)
+    num.k = length(ks)
+    
+    # Keep only lower half of distance matrix (for taking accurate means later)
+    diag(dist.mat) = NA
+    dist.mat[upper.tri(dist.mat)] = NA
+    
+    # Vector to hold silhoette values for each cluster partition
+    msilw = c()
+    
+    # Loop through each partition
+    for (kk in 1:num.k) {
+        k = ks[kk]
+        
+        ## Compute average within cluster distance
+        if (sum(vec.k==k)==1) {
+            within.dist = 0
+        } else {
+            within.dist = mean(dist.mat[vec.k==k,vec.k==k], na.rm=TRUE)
+        }
+        
+        ## Compute all possible between cluster distance
+        ## only use the smallest between-cluster dissimilarity
+        between.dist = c()
+        for (bk in ks[ks!=k]) {
+            tmp.btw = mean(c(dist.mat[vec.k==k,vec.k==bk], dist.mat[vec.k==bk,vec.k==k]), na.rm=TRUE)
+            between.dist = min(between.dist, tmp.btw)
+        }
+        
+        ## Compute silhouette width for this partition
+        msilw[kk] = (between.dist-within.dist)/max(between.dist,within.dist)
+    }
+    
+    return(msilw)
+}
+
 # ---------------------------------------
 # CLUSTERING DISTANCE/CONSISTENCY METRICS
 # ---------------------------------------
