@@ -58,20 +58,30 @@ cluster.spectral = function(S, ks) {
 # CLUSTERING VALIDATION
 # ---------------------
 
-cluster.valid.r2 = function(dist.mat, clusters.mat) {
-    library(vegan)
+# Compute all the cluster validations
+cluster.valid.all = function(dist.mat, sim.mat, cluster.mat) {
+    cluster.validation = list(q=c(), sil=c(), r2=c(), ks=colnames(cluster.mat))
     
-    num.regions = nrow(clusters.mat)
-    num.solutions = ncol(clusters.mat)
-    
-    vec.r2 = c()
-    
-    for (kk in 1:num.solutions) {
-        tmp.adonis = adonis(as.dist(dist.mat) ~ as.factor(clusters.mat[,kk]), permutations=1)
-        vec.r2[kk] = tmp.adonis$aov.tab$R2[1]
+    for(kk in 1:ncol(cluster.mat)) {
+        ## Compute modularity
+        cluster.validation$q[kk] = cluster.valid.modularity(sim.mat, cluster.mat[,kk])
+
+        ## Compute modified silhouette width
+        cluster.validation$sil[[kk]] = cluster.valid.modsilhouette(dist.mat, cluster.mat[,kk])
+
+        ## Compute adonis for each cluster solution?
+        cluster.validation$r2[kk] = cluster.valid.r2(dist.mat, cluster.mat[,kk])
     }
     
-    return(vec.r2)
+    return(cluster.validation)
+}
+
+cluster.valid.r2 = function(dist.mat, vec.k) {
+    library(vegan)
+    dist.mat = as.dist(dist.mat)
+    vec.k = as.factor(vec.k)
+    tmp.adonis = adonis(dist.mat ~ vec.k, permutations=1)
+    return(tmp.adonis$aov.tab$R2[1])
 }
 
 # Computes a modified silhouette width for each cluster solution
@@ -96,6 +106,7 @@ cluster.valid.modsilhouette = function(dist.mat, vec.k) {
     # Keep only lower half of distance matrix (for taking accurate means later)
     diag(dist.mat) = NA
     dist.mat[upper.tri(dist.mat)] = NA
+    dist.mat[dist.mat==0] = NA
     
     # Vector to hold silhoette values for each cluster partition
     msilw = c()
@@ -188,6 +199,21 @@ cluster.dist.cramersv = function(vec1, vec2) {
 # CLUSTERING OTHER STUFF
 # ----------------------
 
+# Creates a sparse matrix by only keep the k smallest connections for each node
+cluster.kNN = function(dist.mat, kNN) {
+    dist.mat = as.matrix(dist.mat)
+    num.regions = ncol(dist.mat)
+    
+    # Loop through columns
+    for (i in 1:num.regions) {
+        ## Set specific element that not in top kNN to 0
+        tmp.which = order(dist.mat[,i])[-1]
+        tmp.which = tmp.which[(kNN+1):length(tmp.which)]
+        dist.mat[tmp.which,i] = 0
+    }
+    
+    return(dist.mat)
+}
 
 ###
 # Match 2 different cluster memberships
