@@ -1,7 +1,0 @@
-Required libraries:
-
-- Rniftilib
-- e1071
-- vcd
-- vegan
-- cluster
