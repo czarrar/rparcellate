@@ -1,8 +1,12 @@
+suppressMessages(library(niftir))
+
+source("searchlight_funs.R")
+
 roidir <- "~/Dropbox/Research/yale/rparcellate"
 
-load_roi <- function(roifile) {
-	img <- read.nifti.image(roifile)
-	hdr <- read.nifti.header(roifile)
+load_nifti <- function(fn) {
+	img <- read.nifti.image(fn)
+	hdr <- read.nifti.header(fn)
 	return(list(img=img, hdr=hdr))
 }
 
@@ -25,12 +29,37 @@ split_hemispheres <- function(roi, hdr) {
 	lh_roi[1:cx,,] <- 0	
 	rh_roi[cx:ex,,] <- 0
 
-	return(list(lh=lh_roi, rh=rh_roi))
+	return(list(lh=as.vector(lh_roi)!=0, rh=as.vector(rh_roi)!=0))
 }
 
 # reho function
 # - does the computation for a given node
 # - that gets the neighbors and loops through the nodes
+
+#' Root mean square of time-series
+#'
+#' Returns the RMSE between a set of time-series
+#'
+#' @param ts.mat matrix of time-series (ntpts x nregions)
+#' 
+#' @export
+#' 
+#' @return vector
+#'
+#' @examples
+#' ts.mat <- matrix(rnorm(500), 100, 5)
+#' rmse(ts.mat)
+rmse <- function(ts.mat) {
+	mean.ts <- rowMeans(ts.mat)
+	diff.sq <- sweep(ts.mat, 1, mean.ts)^2
+	mse	    <- rowMeans(diff.sq)
+	sqrt(mean(mse))
+}
+
+#' Compute rmse-based reho
+reho.rmse <- function(ts.mat, mask, ...) {
+    searchlight(rmse, ts.mat, mask, ...) 
+}
 
 # unconstrained k-means
 
