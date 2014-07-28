@@ -1,5 +1,29 @@
 # Functions that do a searchlight on a brain image
 
+#' Neighbors for a node
+#'
+#' Returns the relative indices of neighbors for a node
+#'
+#' Given a node at the origin, gives the (vector) coordinates of the 
+#' neigbouring nodes. Distance of the neighbors is specified by the user.
+#'
+#' @params dims dimension of array
+#' @params nei maximum value for dimensions in x,y,z axis
+#' @params nei.dist maximum euclidean distance of neighbor
+node_neighbors <- function(dims, nei=1, nei.dist=2, include.self=TRUE) {
+	 # What are the neighbors for a given node?
+    # moffsets gives these neighbors in ijk form
+    moffsets    <- expand.grid(list(i=-nei:nei, j=-nei:nei, k=-nei:nei))
+    dist        <- sqrt(rowSums(moffsets^2))
+    moffsets    <- moffsets[dist<=nei.dist,]
+    # offsets gives these neighbors in vector index form
+    offsets     <- moffsets$k*dims[1]*dims[2] + moffsets$j*dims[1] + moffsets$i
+   if (!include.self) 
+		offsets     <- offsets[offsets!=0]
+	return(offsets)
+}
+
+
 #' Find neighbors for a set of nodes
 #' 
 #' Returns a list of neighbors for each node within a mask
@@ -12,9 +36,10 @@
 #' @param nodes indices of nodes to find neighbors for
 #' @param include.self whether to include the given node in the neighbor list
 #' the self node is included as the first one in the neighboring node list
-#' @param nei
-#' @param nei.dist this is calculated as the manhattan distance
+#' @param nei radius of sphere/box to look for neighbors in
+#' @param nei.dist maximum euclidean distance from center node
 #' @param thr.nei minimum proportion (0-1) of neighbors
+#' @param verbose extent of print (default: TRUE)
 #' 
 #' @export
 #' 
@@ -22,28 +47,20 @@
 #' 
 #' @examples
 #' # TODO
-find_neighbors <- function(mask, nodes=which(mask), 
-                            include.self=TRUE, 
-                            nei=1, nei.dist=3, thr.nei=0) 
+find_neighbors <- function(mask, nodes=which(mask), include.self=TRUE, 
+                           nei=1, nei.dist=2, thr.nei=0, verbose=TRUE) 
 {
     if (is.vector(mask)) stop("please provide the mask as an array")
+	 progress	 <- ifelse(verbose, "text", "none")
     
     dims        <- dim(mask)
     mask        <- as.vector(mask)
     
-    # What are the neighbors for a given node?
-    # moffsets gives these neighbors in ijk form
-    # offsets gives these neighbors in vector index form
-	  # min.nei gives the minimum number of neighbors required
-    moffsets    <- expand.grid(list(i=-nei:nei, j=-nei:nei, k=-nei:nei))
-    dist        <- rowSums(abs(moffsets))
-    moffsets    <- moffsets[dist<=nei.dist,]
-    offsets     <- moffsets$k*dims[1]*dims[2] + moffsets$j*dims[1] + moffsets$i
-    offsets     <- offsets[offsets!=0]
-    if (include.self)
-        offsets <- c(0, offsets)
-	  min.nei		 <- floor(length(offsets)*thr.nei)
-
+	 offsets     <- node_neighbors(dims, nei, nei.dist, 
+											  include.self)
+	 # Minimum number of neigbors with node required
+	 min.nei		 <- floor(length(offsets)*thr.nei)
+	 
     # Let's start
     # for a given node (peak)
     # we get the neighboring indices
@@ -57,12 +74,18 @@ find_neighbors <- function(mask, nodes=which(mask),
         nei_inds <- nei_inds[mask[nei_inds]]
 		  if (length(nei_inds) < min.nei) nei_inds <- c()
 		  return(nei_inds)
-    }, .progress="text", .parallel=FALSE)
+    }, .progress=progress, .parallel=FALSE)
     names(nei_by_node) <- nodes
     #attr(nei_by_node, "offsets") <- offsets
-
+	 
+	 if (verbose) {
+		  nzero <- sum(sapply(nei_by_node, length) == 0)
+		  if (nzero > 0) cat(nzero, "nil node neighbors\n")
+	 }
+	 
     return(nei_by_node)
 }
+
 
 #' Converts nodes in a list to indexing elements withing mask
 #' 
@@ -81,6 +104,27 @@ neighbors_array2mask <- function(neis_by_node0, mask) {
     neis_by_node    		<- lapply(neis_by_node0, function(x) arr2mat_inds[x])
 	return(neis_by_node)
 }
+
+
+#' Find neighbors for a set of nodes
+#' 
+#' Returns a list of neighbors for each node within a mask
+#' 
+#' Neighbors are indices in a masked array. This function combines 
+#' `find_neighbors` with `neighbors_array2mask`.
+#' 
+#' @params mask mask of array
+#' @params ... other options to pass onto `find_neighbors`
+#' 
+#' @export
+#' 
+#' @return list
+find_neighbors_masked <- function(mask, ...) {
+	neis_by_node0 <- find_neighbors(mask, ...)
+	neis_by_node <- neighbors_array2mask(neis_by_node0, as.vector(mask))
+	return(neis_by_node)
+}
+
 
 #' Perform searchlight analysis
 #'
@@ -101,13 +145,13 @@ neighbors_array2mask <- function(neis_by_node0, mask) {
 #'
 #' @return vector
 searchlight <- function(fun, data, mask, process_nodes=which(mask), 
-                        include_self=TRUE, percent_neigbors=0.5, 
+                        include_self=TRUE, percent_neighbors=0.5, 
                         progress="text", parallel=FALSE, ...) 
 {
     # Find the neighbors for each node within your mask
     neis_by_node0   <- find_neighbors(mask, nodes=process_nodes, 
                                       include.self=include_self, 
-                                      thr.nei=percent_neigbors)
+                                      thr.nei=percent_neighbors)
     neis_by_node    <- neighbors_array2mask(neis_by_node0, as.vector(mask))
     
     # Apply function

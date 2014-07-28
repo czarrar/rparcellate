@@ -1,9 +1,10 @@
 source("functions.R")
+library(biganalytics)
 
 # We'll run our parcellation on the localizer data
 
 # Masks for each hemisphere
-greyfile    <- "~/Dropbox/Research/yale/rparcellate/rois/standard_grey_25pc_2mm.nii.gz"
+greyfile    <- "rois/standard_grey_25pc_2mm.nii.gz"
 grey        <- load_nifti(greyfile)
 grey_mask   <- grey$img
 hdr         <- grey$hdr
@@ -20,9 +21,9 @@ mask.func   <- read.mask(maskfile)
 mask        <- (grey_mask!=0) & mask.func & mask.sd
 mask.hemi   <- split_hemispheres(mask, hdr)
 
-
-func.lh     <- func.all[,mask.hemi$lh]
-func.rh     <- func.all[,mask.hemi$rh]
+# scale and mask
+func.lh     <- scale(func.all[,mask.hemi$lh])
+func.rh     <- scale(func.all[,mask.hemi$rh])
 rm(func.all)
 
 
@@ -55,6 +56,22 @@ cat(cmd, "\n")
 system(cmd)
 reho_sm     <- read.nifti.image(sm_file)
 
+# Regenerate the mask
+new_mask    <- reho_sm!=0
+mask_file   <- "step01_reho_mask.nii.gz"
+write.nifti(as.numeric(new_mask), hdr, outfile=mask_file)
+
+old_mask3d  <- mask3d
+old_mask    <- as.vector(old_mask3d)
+mask3d      <- new_mask
+mask        <- as.vector(new_mask)
+
+drop_inds   <- which((old_mask[old_mask] - mask[old_mask]) > 0)
+if (length(drop_inds) > 0) {
+  func <- func[,-drop_inds]
+  tfunc <- tfunc[-drop_inds,]
+}
+
 #' ### Peak Detection
 #' I have used a minimum distance of 8mm or 4 voxels between peaks.
 #+ seeds-peak
@@ -76,18 +93,19 @@ peak_mask_inds <- which(peaks_img[mask] == 1)
 # Use the identified peaks to create cluster centers
 # which are the average between the center node and
 # the neighoring voxels
-centers <- searchlight(function(x) as.matrix(rowMeans(x)), func, mask3d, process_nodes=peak_inds)
+centers <- searchlight(rowMeans, func, mask3d, process_nodes=peak_inds, percent_neighbors=0)
+centers <- tfunc[peak_mask_inds,]
 
 # Now we can compute the k-means clustering
 km1_file <- "step02_kmeans.nii.gz"
-system.time(km1 <- kmeans(t(func), centers, nstart=20, iter.max=200)) # don't think i need nstart
+system.time(km1 <- kmeans(tfunc, centers, nstart=20, iter.max=200)) # don't think i need nstart
 write.nifti(km1$cluster, hdr, mask, outfile=km1_file, overwrite=T)
 
 
 ## 4. Spatially Constrain #############
 
 cl_file     <- "step02_kmeans_spatclust.nii.gz"
-raw_cmd     <- "3dclust -savemask %s -1noneg -isovalue -dxyz=1 0 0 %s &> /dev/null"
+raw_cmd     <- "3dclust -savemask %s -1noneg -isovalue -dxyz=1 0 -1 %s &> /dev/null"
 cmd         <- sprintf(raw_cmd, cl_file, km1_file)
 cat(cmd, "\n")
 system(cmd)
