@@ -1,6 +1,21 @@
 source("functions.R")
 library(biganalytics)
 
+applywarp <- function(infile, reffile, outfile, warpfile, interp="trilinear", verbose=TRUE) {
+    interp_opts <- c("nn", "trilinear", "sinc", "spline")
+    if (!(interp %in% interp_opts)) stop("interp '", interp, "' not found")
+    
+    raw_cmd     <- "applywarp -i %s -r %s -o %s -w %s --interp=%s"
+    cmd         <- sprintf(raw_cmd, 
+                            infile, 
+                            reffile, 
+                            outfile, 
+                            warpfile, 
+                            interp)
+    if (verbose) cat(cmd, "\n")
+    system(cmd)
+}
+
 # We'll run our parcellation on the localizer data
 
 # Masks for each hemisphere
@@ -13,6 +28,28 @@ hdr         <- grey$hdr
 preprocdir  <- "/mnt/nfs/psych/faceMemoryMRI/analysis/preprocessing/tb9226/Localizer/run01.feat"
 funcfile    <- file.path(preprocdir, "reg_standard/filtered_func_data.nii.gz")
 maskfile    <- file.path(preprocdir, "reg_standard/mask.nii.gz")
+
+if (!file.exists(funcfile)) {
+    regdir      <- file.path(preprocdir, "reg")
+    applywarp(
+        infile=file.path(preprocdir, "filtered_func_data.nii.gz"), 
+        reffile=file.path(regdir, "standard.nii.gz"), 
+        outfile=funcfile, 
+        warpfile=file.path(regdir, "example_func2standard_warp.nii.gz"), 
+        interp="trilinear"
+    )
+}
+
+if (!file.exists(maskfile)) {
+    regdir      <- file.path(preprocdir, "reg")
+    applywarp(
+        infile=file.path(preprocdir, "mask.nii.gz"), 
+        reffile=file.path(regdir, "standard.nii.gz"), 
+        outfile=maskfile, 
+        warpfile=file.path(regdir, "example_func2standard_warp.nii.gz"), 
+        interp="nn"
+    )
+}
 
 func.all    <- read.big.nifti(funcfile) # list$img, list$hdr
 mask.sd     <- colsd(func.all) > 0
@@ -38,39 +75,40 @@ dim(mask3d)     <- hdr$dim
 mask_file       <- "step00_mask.nii.gz"
 write.nifti(as.numeric(mask3d), hdr, outfile=mask_file)
 
-#func.rmse       <- reho.rmse(func, mask3d)
-#write.nifti(func.rmse, hdr, mask, outfile=reho_file)
-#mask_file       <- "step01_reho_mask.nii.gz"
-#write.nifti(func.rmse!=0, hdr, mask, outfile=mask_file)
-
 reho_file       <- "step01_reho.nii.gz"
-raw_cmd         <- "3dReHo -mask %s -inset %s -prefix %s"
-cmd             <- sprintf(raw_cmd, mask_file, funcfile, reho_file)
-system(cmd)
+func.rmse       <- reho.rmse(func, mask3d)
+write.nifti(func.rmse, hdr, mask, outfile=reho_file)
+rmask_file      <- "step01_reho_mask.nii.gz"
+write.nifti(func.rmse!=0, hdr, mask, outfile=rmask_file)
+
+#reho_file       <- "step01_reho.nii.gz"
+#raw_cmd         <- "3dReHo -mask %s -inset %s -prefix %s"
+#cmd             <- sprintf(raw_cmd, mask_file, funcfile, reho_file)
+#system(cmd)
 
 # Smooth Results (by 2mm)
 sm_file     <- "step01_reho_smooth02mm.nii.gz"
 raw_cmd     <- "3dBlurInMask -input %s -FWHM 2 -mask %s -prefix %s"
-cmd         <- sprintf(raw_cmd, reho_file, mask_file, sm_file)
+cmd         <- sprintf(raw_cmd, reho_file, rmask_file, sm_file)
 cat(cmd, "\n")
 system(cmd)
 reho_sm     <- read.nifti.image(sm_file)
 
-# Regenerate the mask
-new_mask    <- reho_sm!=0
-mask_file   <- "step01_reho_mask.nii.gz"
-write.nifti(as.numeric(new_mask), hdr, outfile=mask_file)
-
-old_mask3d  <- mask3d
-old_mask    <- as.vector(old_mask3d)
-mask3d      <- new_mask
-mask        <- as.vector(new_mask)
-
-drop_inds   <- which((old_mask[old_mask] - mask[old_mask]) > 0)
-if (length(drop_inds) > 0) {
-  func <- func[,-drop_inds]
-  tfunc <- tfunc[-drop_inds,]
-}
+## Regenerate the mask
+#new_mask    <- reho_sm!=0
+#mask_file   <- "step01_reho_mask.nii.gz"
+#write.nifti(as.numeric(new_mask), hdr, outfile=mask_file)
+#
+#old_mask3d  <- mask3d
+#old_mask    <- as.vector(old_mask3d)
+#mask3d      <- new_mask
+#mask        <- as.vector(new_mask)
+#
+#drop_inds   <- which((old_mask[old_mask] - mask[old_mask]) > 0)
+#if (length(drop_inds) > 0) {
+#  func <- func[,-drop_inds]
+#  tfunc <- tfunc[-drop_inds,]
+#}
 
 #' ### Peak Detection
 #' I have used a minimum distance of 8mm or 4 voxels between peaks.
@@ -86,6 +124,12 @@ system(cmd)
 peaks_img   <- read.nifti.image(peak_file1)
 peak_inds   <- which(peaks_img == 1)
 peak_mask_inds <- which(peaks_img[mask] == 1)
+
+
+
+## 3. Region Growing ######
+
+region_growing(func, start_nodes, mask)
 
 
 ## 3. K-Means #############
