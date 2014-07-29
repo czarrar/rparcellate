@@ -11,15 +11,15 @@
 #' @params nei maximum value for dimensions in x,y,z axis
 #' @params nei.dist maximum euclidean distance of neighbor
 node_neighbors <- function(dims, nei=1, nei.dist=2, include.self=TRUE) {
-	 # What are the neighbors for a given node?
+	# What are the neighbors for a given node?
     # moffsets gives these neighbors in ijk form
     moffsets    <- expand.grid(list(i=-nei:nei, j=-nei:nei, k=-nei:nei))
     dist        <- sqrt(rowSums(moffsets^2))
     moffsets    <- moffsets[dist<=nei.dist,]
     # offsets gives these neighbors in vector index form
     offsets     <- moffsets$k*dims[1]*dims[2] + moffsets$j*dims[1] + moffsets$i
-   if (!include.self) 
-		offsets     <- offsets[offsets!=0]
+    if (!include.self) 
+	    offsets     <- offsets[offsets!=0]
 	return(offsets)
 }
 
@@ -51,15 +51,15 @@ find_neighbors <- function(mask, nodes=which(mask), include.self=TRUE,
                            nei=1, nei.dist=2, thr.nei=0, verbose=TRUE) 
 {
     if (is.vector(mask)) stop("please provide the mask as an array")
-	 progress	 <- ifelse(verbose, "text", "none")
+	progress	<- ifelse(verbose, "text", "none")
     
     dims        <- dim(mask)
     mask        <- as.vector(mask)
     
-	 offsets     <- node_neighbors(dims, nei, nei.dist, 
+	offsets     <- node_neighbors(dims, nei, nei.dist, 
 											  include.self)
-	 # Minimum number of neigbors with node required
-	 min.nei		 <- floor(length(offsets)*thr.nei)
+    # Minimum number of neigbors with node required
+	min.nei	<- floor(length(offsets)*thr.nei)
 	 
     # Let's start
     # for a given node (peak)
@@ -106,6 +106,12 @@ neighbors_array2mask <- function(neis_by_node0, mask) {
 }
 
 
+nodes_mask2array <- function(nodes, mask) {
+    mat2arr_inds    <- which(mask)
+    nodes2          <- mat2arr_inds[nodes]
+	return(nodes2)
+}
+
 #' Find neighbors for a set of nodes
 #' 
 #' Returns a list of neighbors for each node within a mask
@@ -119,9 +125,10 @@ neighbors_array2mask <- function(neis_by_node0, mask) {
 #' @export
 #' 
 #' @return list
-find_neighbors_masked <- function(mask, ...) {
-	neis_by_node0 <- find_neighbors(mask, ...)
-	neis_by_node <- neighbors_array2mask(neis_by_node0, as.vector(mask))
+find_neighbors_masked <- function(mask, nodes=1:sum(mask), ...) {
+    nodes         <- nodes_mask2array(nodes, as.vector(mask))
+	neis_by_node0 <- find_neighbors(mask, nodes, ...)
+	neis_by_node  <- neighbors_array2mask(neis_by_node0, as.vector(mask))
 	return(neis_by_node)
 }
 
