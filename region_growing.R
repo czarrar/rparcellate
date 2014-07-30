@@ -1,104 +1,211 @@
-
 # Playing with converting to C code
-		new_regions <- regions[]
+library(inline)
+library(RcppArmadillo)
+
+
+
+code <- '
+    using namespace arma;
+
+    Rcpp::List list_neis(R_list_neis);
+    
+    Rcpp::NumericVector r_regions(R_regions);
+    vec regions(r_regions.begin(), r_regions.size(), false);
+    vec new_regions = regions; // copy
+    
+    double nregions =  Rcpp::as<double>(R_nregions);
+    double nnodes = (double)regions.n_elem;
+    
+    Rcpp::NumericMatrix r_node_ts(R_node_ts);
+    mat node_ts(r_node_ts.begin(), r_node_ts.nrow(), r_node_ts.ncol(), false);
+    
+    // Mean time-series of each region (maybe I should calculate this here?)
+    Rcpp::NumericMatrix r_region_ts(R_region_ts);
+    mat region_ts(r_region_ts.begin(), r_region_ts.nrow(), r_region_ts.ncol(), false);
+    
+    // Degrees of freedom for when we calculate the correlation
+    double tdf = (double)node_ts.n_rows - 1;
+    
+    // Vector of neighbors with a given region
+    vec region_neis = zeros<vec>(nnodes);
+    
+    // For each node, highest correlation value to neighboring region
+    vec best_cors = zeros<vec>(nnodes);
+    
+    double max_cor; // Stores maximum correlation of region to neighbors
+    arma::uword nei_ind; // Region neighbor index
+    double nchanges = 0; // Number of changes to node assignment made
+    
+    for (double ri=0; ri < nregions; ri++) {
         
-        # calculate region time-series
-        region_ts <- sapply(1:nregions, function(ri) {
-            rowMeans(func[,new_regions==ri,drop=F])
-        })
-	    
-		## Loop through each region
+        // nodes/voxels for the given region
+        uvec region_nodes = find(regions == (ri+1));
+        
+        // all possible neighbors to nodes within region
+        region_neis.zeros();
+		for (uword rni=0; rni<region_nodes.n_elem; rni++) {
+            // for each loop, get the neighbors for one particular node
+			SEXP ln = list_neis[region_nodes(rni)];
+			uvec node_neis = Rcpp::as<uvec>(ln) - 1;
+			region_neis.elem(node_neis).ones();
+		}
+        // remove region nodes themselves
+		for (uword rni=0; rni<region_nodes.n_elem; rni++) {
+            region_neis(region_nodes(rni)) = 0;
+        }
+                
+        // get indices of region neighbors
+        uvec nei_inds = find(region_neis == 1);
+        
+        // if no neighbors left, skip
+        if (nei_inds.n_elem == 0) continue;
+        
+        // since the time-series are normalized, we do a simpler computation 
+        // to get the correlation between this region and its neighbors
+        rowvec rn_cors = (region_ts.col(ri).t() * node_ts.cols(nei_inds))/tdf;
+        
+        // determine correlation threshold for joining
+        max_cor = 0.9 * rn_cors.max();
+        
+        // allow a neighboring voxel to join if
+        // 1. it has a correlation greater than the threshold (`max_cor`)
+        // 2. the correlation is greater than with any other neighboring region
+        for (uword ni=0; ni<nei_inds.n_elem; ni++) {
+            nei_ind = nei_inds(ni);
+            if ((rn_cors(ni) > max_cor) && (new_regions(nei_ind) == 0 || rn_cors(ni) > best_cors(nei_ind))) {
+                new_regions(nei_ind) = ri + 1;
+                best_cors(nei_ind) = rn_cors(ni);
+                nchanges = nchanges + 1;
+            }
+        }
+    }
+    
+    printf("changes -> %.0f\\n", nchanges);
+    
+    return Rcpp::wrap(new_regions);
+'
+
+test_quick_region_grow_worker <- cxxfunction(
+    signature(R_node_ts="numeric", R_region_ts="numeric", R_list_neis="List", R_regions="numeric", R_nregions="numeric"), 
+    code, plugin="RcppArmadillo"
+)
+
+test_quick_region_grow <- function(func, start_nodes, mask3d) {
+	## Setup ##
+    mask        <- as.vector(mask3d)
+	nnodes      <- ncol(func)
+	ntpts		<- nrow(func)
+	nregions    <- length(start_nodes)
+	regions	    <- vector("numeric", nnodes)
+
+	## Initialize region time-course ##
+	# Average within a radius of 1.5 times the voxel size
+	start_neis 	<- find_neighbors_masked(mask3d, start_nodes, 
+										 nei=1, nei.dist=1.5, 
+										 verbose=FALSE) # add this!
+	for (ri in 1:nregions) {
+		neis <- start_neis[[ri]]
+        regions[neis] <- ri
+	}
+    regions <- as.double(regions)
+    new_regions <- regions[]
+    
+    # calculate region time-series
+    region_ts <- sapply(1:nregions, function(ri) {
+        rowMeans(func[,new_regions==ri,drop=F])
+    })
+    region_ts <- scale(region_ts)
+    
+    # calculate neighbors for each node
+	lst_neis <- find_neighbors_masked(mask3d, include.self=F, verbose=F)
+    
+    # loop through each region and grow
+    print(system.time(ret <- test_quick_region_grow_worker(func, region_ts, lst_neis, regions, as.double(nregions))))
+    
+    return(ret)
+}
+
+test_slow_region_grow <- function(func, start_nodes, mask3d) {
+	## Setup ##
+    mask        <- as.vector(mask3d)
+	nnodes      <- ncol(func)
+	ntpts		<- nrow(func)
+	nregions    <- length(start_nodes)
+	regions	    <- vector("numeric", nnodes)
+
+	## Initialize region time-course ##
+	# Average within a radius of 1.5 times the voxel size
+	start_neis 	<- find_neighbors_masked(mask3d, start_nodes, 
+										 nei=1, nei.dist=1.5, 
+										 verbose=FALSE) # add this!
+	for (ri in 1:nregions) {
+		neis <- start_neis[[ri]]
+        regions[neis] <- ri
+	}
+    regions <- as.double(regions)
+    new_regions <- regions[]
+    
+    # calculate region time-series
+    region_ts <- sapply(1:nregions, function(ri) {
+        rowMeans(func[,new_regions==ri,drop=F])
+    })
+    region_ts <- scale(region_ts)
+    
+    # calculate neighbors for each node
+	lst_neis <- find_neighbors_masked(mask3d, include.self=F, verbose=F)
+    
+    # loop through each region and grow
+	# Loop through each region
+    nchanges <- 0
+	for (ri in 1:nregions) {		
+		# Get neighborhood
+		region_nodes	<- which(regions == ri)
+		nei_nodes		<- unique(unlist(lst_neis[region_nodes]))
+        nei_nodes       <- nei_nodes[!(nei_nodes %in% region_nodes)]
+        if (length(nei_nodes) == 0) next
+        
+        # Get ts
+        rts             <- region_ts[,ri]
+		nts				<- func[,nei_nodes,drop=F]
 		
-		# Other thought here is to get neighbors for all the nodes
-		# at once. In fact this would be the most efficient approach!
-		lst_neis <- find_neighbors_masked(mask3d, region_nodes, 
-										include.self=FALSE, verbose=FALSE)
-		# want to unwrap?
-		
-		arma::uvec neis = Rcpp::as<arma::uvec>(ll) - 1;
-		
-		# for (ri in 1:nregions) {
-		
-		# could loop through lst_neis and save to new variable
-		# or could have lst_neis has matrix and null neis are set to 0
-		# i think the first option is easier. would be nice if i could 
-		# check if unique each time added. otherwise could just have the
-		# output vector be a list as long as the nnodes and assign values to it
-		# then i can subset the func data frame
-			region_nodes = arma::find(regions == (ri+1));
-			neis_vec.zeros()
-			for (int rni=0; rni<region_nodes.n_elem; rni++) {
-				SEXP ln = lst_neis[region_nodes(rni) - 1];
-    			arma::uvec nei_inds = Rcpp::as<arma::uvec>(ln) - 1;
-				neis_vec.elem(nei_inds).ones();
-			}
-		# so the neis here will hold all the neighbor hood indices
-			nei_inds = arma::find(neis_vec);
-			arma::colvec rn_cors = region_ts.col(ri) * func_ts.cols(nei_inds);
-		
-		# get the correlation threshold
-			max_cor = 0.9 .* rn_cors.max();
-		
-		# grow only to neighborhood vertices greater than thresh
-			neis_to_join = nei_inds[arma::find(rn_cors > max_cor)]
-		
-		# also check if another region did not grow into the node
-		   # loop through this neis_to_join
-			for (int ni=0; ni<neis_to_join.n_elem; ni++) {
-				int nei_to_join = neis_to_join[ni];
-				if (rn_cors[nei_to_join] > nei_cors[nei_to_join]) { # rn_cors and nei_cors have different indices
-					nei_cors[nei_to_join] = rn_cors[nei_to_join]
-					regions[nei_to_join] = ri + 1;
-				}				
-			}
-		
-			nei_cors[neis_to_join[ni]] = rn_cors;
-		
-		# i can either compute the correlation or the dot-product if it is already scaled
-		
-		# OH check if region_ts are scaled
-		
-		# }
-		
-		for (ri in 1:nregions) {
-			# Get region ts
-			rts <- region_ts[,ri]
-			
-			# Get neighborhood ts
-			region_nodes	<- which(regions == ri)
-			lst_neis 		<- find_neighbors_masked(mask3d, region_nodes, 
-										include.self=FALSE, verbose=FALSE)
-			nei_nodes		<- unique(unlist(lst_neis))
-			nts				<- func[,nei_nodes,drop=F]
-			
-			# Compute correlation btw region and neighbors
-			rn_cors			<- cor(rts, nts)[1,]
-			
-			# Select those with 90% of maximum correlation
-			max_cor			<- 0.9 * max(rn_cors)
-			neis_join  		<- nei_nodes[rn_cors > max_cor]
-			
-			# Assign nodes to region
-			# but if already assigned see if our correlation is greater
-			for (nei in neis_join) {
-				if (new_regions[nei] == 0) {
-					new_regions[nei] <- ri
-				} else {
-					prev_reg    <- new_regions[nei]
-					prev_cor    <- cor(region_ts[,prev_reg], func[,nei])
-					cur_cor 	<- rn_cors[nei_nodes == nei]
-					if (prev_cor > cur_cor) new_regions[nei] <- ri
-				}
+		# Compute correlation btw region and neighbors
+		#rn_cors			<- cor(rts, nts)[1,]
+        rn_cors			<- (t(rts) %*% nts)[1,]/(nrow(func)-1)
+        
+		# Select those with 90% of maximum correlation
+		max_cor			<- 0.9 * max(rn_cors)
+		neis_join  		<- nei_nodes[rn_cors > max_cor]
+        
+		# Assign nodes to region
+		# but if already assigned see if our correlation is greater
+		for (nei in neis_join) {
+			if (new_regions[nei] == 0) {
+				new_regions[nei] <- ri
+                nchanges <- nchanges + 1
+			} else {
+				prev_reg    <- new_regions[nei]
+				prev_cor    <- cor(region_ts[,prev_reg], func[,nei])
+				cur_cor 	<- rn_cors[nei_nodes == nei]
+				if (prev_cor > cur_cor) {
+                    new_regions[nei] <- ri
+                    nchanges <- nchanges + 1
+                }
 			}
 		}
-		        
-		regions <- new_regions
-		nleft <- sum(regions == 0)
-		cat("# left", nleft, "\n")
+	}
+    
+    cat("changes ->", nchanges, "\n")
+    
+    return(new_regions)
+}	    
 
 
+system.time(comp <- test_quick_region_grow(func, peak_mask_inds, mask3d))
+system.time(ref  <- test_slow_region_grow(func, peak_mask_inds, mask3d))
 
-
+# find the mismatches
+sapply(1:max(ref), function(i) all.equal(as.vector(comp)==i, ref==i))
+## i might then focus on each to figure out the deal
 
 
 # region growing
@@ -145,10 +252,12 @@ region_growing <- function(func, start_nodes, mask3d) {
 			lst_neis 		<- find_neighbors_masked(mask3d, region_nodes, 
 										include.self=FALSE, verbose=FALSE)
 			nei_nodes		<- unique(unlist(lst_neis))
+            nei_nodes       <- nei_nodes[!(nei_nodes %in% region_nodes)]
 			nts				<- func[,nei_nodes,drop=F]
 			
 			# Compute correlation btw region and neighbors
 			rn_cors			<- cor(rts, nts)[1,]
+			#rn_cors			<- (t(rts) %*% nts)[1,]/(nrow(func)-1)
 			
 			# Select those with 90% of maximum correlation
 			max_cor			<- 0.9 * max(rn_cors)
@@ -177,3 +286,34 @@ region_growing <- function(func, start_nodes, mask3d) {
 }
 
 
+
+
+# Let's see if we can modify and return with reference
+code <- '
+    arma::vec regions = Rcpp::as<arma::vec>(R_regions);
+    regions(0) = 100;
+    return Rcpp::wrap(regions);
+'
+test_modify_vector <- cxxfunction(
+    signature(R_regions="numeric"), 
+    code, plugin="RcppArmadillo"
+)
+regions <- vector("numeric", 10)
+cp_regions <- test_modify_vector(as.double(regions))
+
+
+code <- '
+    Rcpp::NumericVector r_regions(R_regions);
+    arma::vec regions(r_regions.begin(), r_regions.size(), false);
+    regions(0) = 100;
+    arma::vec new_regions = regions;
+    new_regions(0) = 200;
+    return Rcpp::wrap(new_regions);
+'
+test_modify_vector <- cxxfunction(
+    signature(R_regions="numeric"), 
+    code, plugin="RcppArmadillo"
+)
+regions <- vector("numeric", 10)
+cp_regions <- test_modify_vector(regions)
+all.equal(as.numeric(regions), as.numeric(cp_regions))
