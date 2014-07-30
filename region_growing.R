@@ -157,6 +157,7 @@ test_slow_region_grow <- function(func, start_nodes, mask3d) {
     # loop through each region and grow
 	# Loop through each region
     nchanges <- 0
+    best_cors <- vector("numeric", nnodes)
 	for (ri in 1:nregions) {		
 		# Get neighborhood
 		region_nodes	<- which(regions == ri)
@@ -179,22 +180,21 @@ test_slow_region_grow <- function(func, start_nodes, mask3d) {
 		# Assign nodes to region
 		# but if already assigned see if our correlation is greater
 		for (nei in neis_join) {
+			cur_cor 	<- rn_cors[nei_nodes == nei]
 			if (new_regions[nei] == 0) {
 				new_regions[nei] <- ri
                 nchanges <- nchanges + 1
+                best_cors[nei] <- cur_cor
 			} else {
-				prev_reg    <- new_regions[nei]
-				prev_cor    <- cor(region_ts[,prev_reg], func[,nei])
-				cur_cor 	<- rn_cors[nei_nodes == nei]
-				if (prev_cor > cur_cor) {
+				prev_cor    <- best_cors[nei]
+				if (cur_cor > prev_cor) {
                     new_regions[nei] <- ri
                     nchanges <- nchanges + 1
+                    best_cors[nei] <- cur_cor
                 }
 			}
 		}
 	}
-    
-    cat("changes ->", nchanges, "\n")
     
     return(new_regions)
 }	    
@@ -204,9 +204,13 @@ system.time(comp <- test_quick_region_grow(func, peak_mask_inds, mask3d))
 system.time(ref  <- test_slow_region_grow(func, peak_mask_inds, mask3d))
 
 # find the mismatches
-sapply(1:max(ref), function(i) all.equal(as.vector(comp)==i, ref==i))
+tmp0 <- sapply(1:max(ref), function(i) all.equal(as.vector(comp)==i, ref==i))
 ## i might then focus on each to figure out the deal
 
+system.time(comp2 <- test_quick_region_grow(func, peak_mask_inds, mask3d))
+system.time(ref2  <- test_slow_region_grow(func, peak_mask_inds, mask3d))
+
+system.time(ref3  <- test_slow_region_grow(func, peak_mask_inds, mask3d))
 
 # region growing
 # - start with some regions (assignment and time-courses)
