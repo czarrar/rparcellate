@@ -82,7 +82,6 @@ code <- '
 					}
 				}
 			}
-	        
 	        // get indices of region neighbors
 	        uvec nei_inds = find(region_neis == 1);
 	        
@@ -155,7 +154,6 @@ test_quick_region_grow <- function(func, start_nodes, mask3d) {
     print(system.time(ret <- test_quick_region_grow_worker(func/sqrt(ntpts-1), lst_neis, regions, as.double(nregions))))
     
     return(ret)
-}
 
 system.time(comp <- test_quick_region_grow(func, peak_mask_inds, mask3d))
 
@@ -273,10 +271,8 @@ system.time(ref  <- test_quick_region_ts(func, peak_mask_inds, mask3d))
 
 system.time(comp <- test_quick_region_grow(func, peak_mask_inds, mask3d))
 
-
 system.time(ref  <- test_slow_region_grow(func, peak_mask_inds, mask3d))
 write.nifti(ref, hdr, mask, outfile="step02_region_growing_r.nii.gz", overwrite=T)
-
 
 
 # region growing
