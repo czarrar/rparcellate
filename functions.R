@@ -18,10 +18,10 @@ split_hemispheres <- function(roi, hdr) {
 	center.coord <- as.numeric(hdr$qto.ijk %*% c(0,0,0,1))[-4]
 	cat("xyz: 0 0 0 => ijk:", center.coord, "\n")
     
-    # Note the above is based on the first element being 0
-    # need to convert 0 => 1
-    cx <- center.coord[1] + 1 # center of x-axis
-    ex <- dim(roi)[1] # end of x-axis
+  # Note the above is based on the first element being 0
+  # need to convert 0 => 1
+  cx <- center.coord[1] + 1 # center of x-axis
+  ex <- dim(roi)[1] # end of x-axis
 
     # Split the hemispheres
 	lh_roi <- roi[,,]
