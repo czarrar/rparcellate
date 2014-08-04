@@ -4,6 +4,7 @@ library(XML)
 library(plyr)
 suppressMessages(library(niftir))
 library(biganalytics)
+library(stringr)
 
 fsldir	<- Sys.getenv("FSLDIR")
 
@@ -85,9 +86,15 @@ probs     <- probs[,mask] # total of 286,933 voxels
 # 3. Max probabilities / assign labels
 ## assign each voxel to a label based on some max probability threshold
 thrs      <- c(0, 10, 20, 25, 50)
+#thrs <- c(20,25)
 all.max.probs <- t(laply(thrs, function(thr) {
   cat("thr:", thr, "\n")
   aaply(probs, 2, function(x) {
+    ## exclude white-matter to allow more grey-matter
+    x[c(1,12)] <- 0
+    ## set white-matter threshold to two times thr
+    ## so allow more grey matter
+    #x[c(1,12)] <- x[c(1,12)] * (x[c(1,12)] > (thr*2))
     ind <- which.max(x)
     ifelse(x[ind]>thr, ind, 0)
   }, .progress="text")
