@@ -152,7 +152,7 @@ find_neighbors_masked <- function(mask, nodes=1:sum(mask), ...) {
 #'
 #' @return vector
 searchlight <- function(fun, data, mask, process_nodes=which(mask), 
-                        include_self=TRUE, percent_neighbors=0.5, 
+                        include_self=TRUE, percent_neighbors=0.25, 
                         progress="text", parallel=FALSE, ...) 
 {
     # Find the neighbors for each node within your mask
