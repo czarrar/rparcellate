@@ -86,7 +86,6 @@ probs     <- probs[,mask] # total of 286,933 voxels
 # 3. Max probabilities / assign labels
 ## assign each voxel to a label based on some max probability threshold
 thrs      <- c(0, 10, 20, 25, 50)
-#thrs <- c(20,25)
 all.max.probs <- t(laply(thrs, function(thr) {
   cat("thr:", thr, "\n")
   aaply(probs, 2, function(x) {

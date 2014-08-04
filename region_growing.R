@@ -153,7 +153,7 @@ code <- '
     uword nvoxs = regions.n_elem;
     uword nregions =  Rcpp::as<uword>(R_nregions);
     
-    int maxiter = 200;
+    int maxiter = 400;
     
     
     /*** CLUSTER ***/

@@ -44,4 +44,5 @@ if (!file.exists(maskfile)) {
     )
 }
 
-parcels <- region_growing_wrapper(funcfile, maskfile, priorfile, outdir="ztest")
+parcels <- region_growing_wrapper(funcfile, maskfile, priorfile, outdir="ztest", roi.scale=1000)
+parcels <- region_growing_wrapper(funcfile, maskfile, priorfile, outdir="ztest2", roi.scale=1000)
