@@ -1,8 +1,8 @@
 # Playing with converting to C code
 library(inline)
 library(RcppArmadillo)
-suppressMessages(library(niftir))
-source("searchlight_funs.R")
+suppressMessages(library(biganalytics))
+source("functions.R")
 
 cat("compiling\n")
 
@@ -240,7 +240,7 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
     dim(mask3d) <- hdr$dim
 	nnodes      <- ncol(func)
 	ntpts		<- nrow(func)
-	nregions    <- as.double(length(start_nodes))
+	nregions    <- as.double(length(starting_nodes))
 	regions	    <- vector("numeric", nnodes)
     if (normalize) func <- func/sqrt(ntpts-1)
     
@@ -270,7 +270,7 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
     isolates <- regions2==0
     if (any(isolates)) {
         cat("Removing isolates:", sum(isolates), "\n")
-        regions2 <- regions2[isolates]
+        regions2 <- regions2[!isolates]
         mask3d[mask][isolates] <- F
         func <- func[,!isolates]
         lst_neis <- find_neighbors_masked(mask3d, include.self=F, verbose=F)
@@ -282,9 +282,9 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
     nregions <- as.integer(length(unique(regions2)))
     system.time(regions3 <- refine_region_growing_worker(func, lst_neis, regions2, nregions))
     
-    
     # DONE!
-    list(regions=as.vector(regions3), mask=as.vector(mask3d), regions0=as.vector(regions2))
+    list(regions=as.vector(regions3), mask=as.vector(mask3d), regions0=as.vector(regions2), 
+    	nregions=nregions)
 }
 
 reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
@@ -345,15 +345,12 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     list(img=peaks_img, all.inds=peak_inds, mask.inds=peak_mask_inds)
 }
 
-region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL) {
+region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL, roi.scale=10000) {
 	if (!is.null(outdir)) {
 		cat("Setup output\n")
 		if (file.exists(outdir)) stop("output directory cannot exist")
 		dir.create(outdir)
-		reho_prefix <- file.path(outdir, "reho")
 		outfile <- file.path(outdir, "parcellation.nii.gz")
-	} else {
-		reho_prefix <- NULL
 	}
 
 	cat("Read in data\n")
@@ -376,11 +373,13 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL) 
         mask    <- mask.main & mask.sd & (rois.all == rois[i])
         func    <- scale(func.all[,mask])
         
-        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=2, outprefix=reho_prefix)
+        outprefix <- ifelse(is.null(outdir), NULL, sprintf("%s/roi%02i_reho", outdir, i))
+        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=2, outprefix=outprefix)
         ret     <- region_growing(func, peaks$mask.inds, mask, hdr)
         
+        if (ret$nregions > roi.scale) warning("nregions > scale: ", ret$nregions, " vs ", roi.scale)
         parcels <- vector("integer", nvoxs)
-        parcels[mask] <- ret$regions
+        parcels[ret$mask] <- ret$regions + i*roi.scale
         
     	cat("====\n")
         parcels
@@ -389,15 +388,25 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL) 
     # Combine
     cat("Combine\n")
     parcels     <- rowSums(parcels.rois)
-    
+
+    cat("Relabel\n")
+    regions     <- sort(unique(parcels[parcels!=0]))
+    nregions    <- length(regions)
+    reparcel	<- vector("numeric", nvoxs)
+    for (i in 1:nregions) {
+    	inds <- parcels == regions[i]
+    	reparcel[inds] <- i
+    }
+
     # if outdir is given, then save the parcels as an image as well
     if (!is.null(outdir)) {
     	cat("Save output\n")
-    	mask <- mask.main & mask.sd & (roi.all>0)
+    	mask <- mask.main & mask.sd & (rois.all>0)
     	mask3d <- mask; dim(mask3d) <- hdr$dim
     	write.nifti(mask3d*1, hdr, outfile=file.path(outdir, "mask.nii.gz"))
-    	write.nifti(parcels, mask, hdr, outfile=file.path(outdir, "parcels.nii.gz"))
+    	write.nifti(parcels, hdr, outfile=file.path(outdir, "parcels.nii.gz"))
+    	write.nifti(reparcel, hdr, outfile=file.path(outdir, "parcels_relabel.nii.gz"))
     }
 
-    .invisible(parcels)
+    invisible(parcels)
 }
