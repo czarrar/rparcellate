@@ -360,7 +360,7 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL) 
     hdr         <- read.nifti.header(mask_file)
     ## assume that mask can be multiple different ROIs
     mask.main   <- read.mask(mask_file)
-    roi.all     <- as.vector(read.nifti.image(roi_file))
+    rois.all    <- as.vector(read.nifti.image(roi_file))
     rois        <- unique(rois.all[rois.all!=0])
     nrois       <- length(rois)
     nvoxs		<- length(mask.main)
@@ -373,7 +373,7 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL) 
     parcels.rois <- sapply(1:nrois, function(i) {
         cat("...", i, "\n", sep="")
         
-        mask    <- mask.main & mask.sd & (roi.all == rois[i])
+        mask    <- mask.main & mask.sd & (rois.all == rois[i])
         func    <- scale(func.all[,mask])
         
         peaks   <- reho_peak_detection(func, mask, hdr, fwhm=2, outprefix=reho_prefix)
