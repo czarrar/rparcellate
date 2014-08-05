@@ -31,35 +31,33 @@ split_hemispheres <- function(roi, hdr) {
 	return(list(lh=as.vector(lh_roi)!=0, rh=as.vector(rh_roi)!=0))
 }
 
-# reho function
-# - does the computation for a given node
-# - that gets the neighbors and loops through the nodes
+# Temporally concatenate data from multiple subjects / runs
+temporally_concatenate <- function(in_func_files, in_mask_files, out_func_file, out_mask_file) {
+	require(plyr)
 
-#' Root mean square of time-series
-#'
-#' Returns the RMSE between a set of time-series
-#'
-#' @param ts.mat matrix of time-series (ntpts x nregions)
-#' 
-#' @export
-#' 
-#' @return vector
-#'
-#' @examples
-#' ts.mat <- matrix(rnorm(500), 100, 5)
-#' rmse(ts.mat)
-rmse <- function(ts.mat) {
-	mean.ts <- rowMeans(ts.mat)
-	diff.sq <- sweep(ts.mat, 1, mean.ts)^2
-	mse	    <- rowMeans(diff.sq)
-	sqrt(mean(mse))
+	n <- length(in_func_files)
+	if (n != length(in_mask_files)) stop("number of func files doesn't equal number of mask files")
+
+	# Mask
+	cat("combine masks\n")
+	masks <- sapply(in_mask_files, read.mask)
+	mask <- rowSums(masks) == n
+
+	# Functionals
+	cat("combine functionals\n")
+	funcs <- laply(in_func_files, function(in_func_file) {
+		func <- read.big.nifti(func_file)
+		func <- do.mask(func, mask)
+		as.matrix(func)
+	})
+	# TODO: merge some of the dimensions here
+	dim(funcs) <- c(dim(funcs)...)
+
+	# Save
+	cat("save\n")
+	hdr <- read.nifti.header(in_func_files[[1]])
+	write.nifti(mask, hdr, outfile=out_mask_file, overwrite=T)
+	write.nifti(funcs, hdr, mask, outfile=out_func_file, overwrite=T)
+
+	invisible(NULL)
 }
-
-#' Compute rmse-based reho
-reho.rmse <- function(ts.mat, mask, ...) {
-    searchlight(rmse, ts.mat, mask, ...) 
-}
-
-
-# Next step is to do hierarchical clustering
-# We would want to ward linkage but to actually determine link with maximal similarity?

@@ -303,7 +303,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
 
     cat("running rmse reho\n")
     reho_file       <- paste(outprefix, "map.nii.gz", sep="_")
-    func.rmse       <- reho.rmse(func, mask3d)
+    func.rmse       <- reho.rmse(func, mask3d, percent_neighbors=1)
     write.nifti(func.rmse, hdr, mask, outfile=reho_file) # don't have this allow anything
 
     # new mask since not every voxel will have an output
@@ -409,4 +409,25 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL, 
     }
 
     invisible(parcels)
+}
+
+region_growing_group <- function(func_files, mask_files, roi_file, outdir) {
+	cat("Setup group output\n")
+	if (file.exists(outdir)) stop("output directory cannot exist")
+	dir.create(outdir)
+
+	cat("Temporally concatenate\n")
+	mask_file <- file.path(outdir, "concatenate_mask.nii.gz"))
+	func_file <- file.path(outdir, "concatenate_func.nii.gz")
+	temporally_concatenate(func_files, mask_files, func_file, mask_file)
+
+	cat("Group-level parcellation\n")
+	region_growing_outdir <- file.path(outdir, "region_growing")
+	grp.parcels <- region_growing_wrapper(func_file, mask_file, roi_file, region_growing_outdir)
+
+	cat("Subject-level parcellation\n")
+	# for each subject, get mean time-series for each region
+	# compute spatial correlation of this time-series with the rest of the brain
+	# keep only those voxels that are spatially connected with main cluster
+	# and have max correlation greater than any other parcellation
 }
