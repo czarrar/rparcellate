@@ -34,30 +34,48 @@ split_hemispheres <- function(roi, hdr) {
 # Temporally concatenate data from multiple subjects / runs
 temporally_concatenate <- function(in_func_files, in_mask_files, out_func_file, out_mask_file) {
 	require(plyr)
+	suppressMessages(require(niftir))
+	require(biganalytics)
 
 	n <- length(in_func_files)
 	if (n != length(in_mask_files)) stop("number of func files doesn't equal number of mask files")
 
+	# Functionals
+	cat("combining", n, "functionals\n")
+	## collect the dimensions to pre-make the combined functional
+	dims <- sapply(in_func_files, function(fn) read.nifti.header(fn)$dim)
+	nvols <- dims[4,]
+	funcs <- matrix(0, c(prod(dims[1:3,1]), sum(nvols)))
+	masks.sd <- matrix(0, prod(dims[1:3,1]), n)
+	for (i in 1:n) {
+		cat(i, "...", sep="")
+		# read in data
+		func <- read.big.nifti(in_func_files[i])
+		# compute standard deviation (mask)
+		masks.sd[,i] <- colsd(func) > 0
+		# save
+		adj <- sum(nvols[0:(i-1)])
+		time_inds <- (1:nvols[i]) + adj
+		funcs[,time_inds] <- t(func[,])
+	}
+	dim(funcs) <- c(dims[1:3,1], sum(nvols))
+	cat("\n")
+
 	# Mask
 	cat("combine masks\n")
-	masks <- sapply(in_mask_files, read.mask)
-	mask <- rowSums(masks) == n
-
-	# Functionals
-	cat("combine functionals\n")
-	funcs <- laply(in_func_files, function(in_func_file) {
-		func <- read.big.nifti(func_file)
-		func <- do.mask(func, mask)
-		as.matrix(func)
-	})
-	# TODO: merge some of the dimensions here
-	dim(funcs) <- c(dim(funcs)...)
+	masks.main <- sapply(in_mask_files, read.mask)
+	mask.main <- (rowSums(masks) == n)
+	mask.sd <- rowSums(masks.sds) == n
+	mask <- mask.main & mask.sd
 
 	# Save
 	cat("save\n")
-	hdr <- read.nifti.header(in_func_files[[1]])
+	hdr <- read.nifti.header(in_mask_files[[1]])
 	write.nifti(mask, hdr, outfile=out_mask_file, overwrite=T)
-	write.nifti(funcs, hdr, mask, outfile=out_func_file, overwrite=T)
+
+	hdr$dim <- c(hdr$dim, ncol(funcs))
+	hdr$pixdim <- c(hdr$pixdim, 1)
+	write.nifti(funcs, hdr, outfile=out_func_file, overwrite=T)
 
 	invisible(NULL)
 }
