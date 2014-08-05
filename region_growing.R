@@ -417,7 +417,7 @@ region_growing_group <- function(func_files, mask_files, roi_file, outdir) {
 	dir.create(outdir)
 
 	cat("Temporally concatenate\n")
-	mask_file <- file.path(outdir, "concatenate_mask.nii.gz"))
+	mask_file <- file.path(outdir, "concatenate_mask.nii.gz")
 	func_file <- file.path(outdir, "concatenate_func.nii.gz")
 	temporally_concatenate(func_files, mask_files, func_file, mask_file)
 
