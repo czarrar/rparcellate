@@ -12,6 +12,12 @@ load_nifti <- function(fn) {
 matrix_like <- function(ref, val=NA, ...) matrix(val, nrow(ref), ncol(ref), ...)
 array_like <- function(ref, val=NA, ...) array(val, dim(ref), ...)
 
+run <- function(raw_cmd, ...) {
+	cmd <- sprintf(raw_cmd, ...)
+	cat(cmd, "\n")
+	system(cmd)
+}
+
 split_hemispheres <- function(roi, hdr) {
 	# Get the center coordinate
 	center.coord <- as.numeric(hdr$qto.ijk %*% c(0,0,0,1))[-4]
@@ -76,6 +82,40 @@ temporally_concatenate <- function(in_func_files, in_mask_files, out_func_file, 
 	hdr$dim <- c(hdr$dim, ncol(funcs))
 	hdr$pixdim <- c(hdr$pixdim, 1)
 	write.nifti(funcs, hdr, outfile=out_func_file, overwrite=T)
+
+	invisible(NULL)
+}
+
+# use afni or fsl
+temporally_concatenate_afni <- function(in_func_files, in_mask_files, out_func_file, out_mask_file) {
+	hdr <- read.nifti.header(in_mask_files[1])
+
+	# Center and optionally scale each functional image
+	# Compute the standard deviation of each image for the mask as well
+	cat("computing standard deviation\n")
+	mask_sd_files <- sapply(in_func_files, function(infile) {
+		outfile <- tempfile(pattern="mask_sd_", fileext=".nii.gz")
+		run("3dTstat -stdev -prefix %s %s", outfile, infile)
+		# TODO: also call the -mean option and save that output
+		# TODO: subtract the mean and divide by the standard deviation, save this as well
+		outfile
+	})
+
+	# Read in the mask files and combine
+	cat("combine masks\n")
+	masks <- sapply(c(in_mask_files, mask_sd_files), read.mask)
+	mask <- rowSums(masks) == ncol(masks)
+	write.nifti(mask, hdr, outfile=out_mask_file, overwrite=T)
+
+	# TODO: only combine the normalized dataset
+
+	# Combine the functionals
+	cat("combining the functionals\n")
+	run("3dTcat -verb -output %s %s", out_func_file, paste(in_func_files, collapse=" "))
+
+	# Removing temporary files
+	cat("removing temporary files\n")
+	file.remove(mask_sd_files)
 
 	invisible(NULL)
 }
