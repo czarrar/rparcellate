@@ -325,7 +325,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     #+ seeds-peak
     peak_file1  <- paste(outprefix, "smooth02mm_peaks.nii.gz", sep="_")
     peak_file2  <- paste(outprefix, "smooth02mm_peaks.txt", sep="_")
-    raw_cmd     <- "3dExtrema -maxima -volume -closure -mask_file %s -output %s %s 1> %s"
+    raw_cmd     <- "3dExtrema -minima -volume -closure -mask_file %s -output %s %s 1> %s"
     cmd         <- sprintf(raw_cmd, rmask_file, peak_file1, sm_file, peak_file2)
     cat(cmd, "\n")
     system(cmd)
