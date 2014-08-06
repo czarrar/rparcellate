@@ -90,7 +90,7 @@ all.max.probs <- t(laply(thrs, function(thr) {
   cat("thr:", thr, "\n")
   aaply(probs, 2, function(x) {
     ## exclude white-matter to allow more grey-matter
-    x[c(1,12)] <- 0
+    #x[c(1,12)] <- 0
     ## set white-matter threshold to two times thr
     ## so allow more grey matter
     #x[c(1,12)] <- x[c(1,12)] * (x[c(1,12)] > (thr*2))
