@@ -153,7 +153,7 @@ code <- '
     uword nvoxs = regions.n_elem;
     uword nregions =  Rcpp::as<uword>(R_nregions);
     
-    int maxiter = 400;
+    int maxiter = 200;
     
     
     /*** CLUSTER ***/
@@ -219,7 +219,7 @@ code <- '
     }
     
     if (niter >= maxiter) {
-        printf("warning: did not converge. %i changes in the last iteration.", niter);
+        printf("warning: did not converge. %i changes in the last iteration.", nchanges);
     }
     
     return Rcpp::wrap(regions);
@@ -431,3 +431,8 @@ region_growing_group <- function(func_files, mask_files, roi_file, outdir) {
 	# keep only those voxels that are spatially connected with main cluster
 	# and have max correlation greater than any other parcellation
 }
+
+# one approach to subject-level is dual regression style
+# for each partition, get mean time-series and then compute correlation with everything
+# pick max?
+
