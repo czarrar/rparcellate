@@ -1,0 +1,44 @@
+uber_subject.py                                                                \
+    -cvar subj_dir subject_results/group.facebody1/subj.fb1_01                 \
+    -svar align_cost lpc+ZZ                                                    \
+    -svar anat                                                                 \
+    /mnt/nfs/psych/facebody01/data/nifti/tb6859/tb6859_highres.nii.gz          \
+    -svar blocks align tlrc volreg blur mask scale regress                     \
+    -svar blur_size 3.0                                                        \
+    -svar epi                                                                  \
+    /mnt/nfs/psych/facebody01/data/nifti/tb6859/tb6859_FaceBody01_run01.nii.gz \
+    /mnt/nfs/psych/facebody01/data/nifti/tb6859/tb6859_FaceBody01_run02.nii.gz \
+    /mnt/nfs/psych/facebody01/data/nifti/tb6859/tb6859_FaceBody01_run03.nii.gz \
+    /mnt/nfs/psych/facebody01/data/nifti/tb6859/tb6859_FaceBody01_run04.nii.gz \
+                                                                               \
+    -svar epi_wildcard yes                                                     \
+    -svar gid facebody1                                                        \
+    -svar regress_jobs 4                                                       \
+    -svar regress_mot_deriv yes                                                \
+    -svar run_clustsim no                                                      \
+    -svar sid fb1_01                                                           \
+    -svar stim                                                                 \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Body_run01.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Body_run02.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Body_run03.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Body_run04.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Face_run01.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Face_run02.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Face_run03.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_Face_run04.1D  \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_House_run01.1D \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_House_run02.1D \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_House_run03.1D \
+    /mnt/nfs/psych/facebody01/command/timing/afni/tb6859/tb6859_House_run04.1D \
+                                                                               \
+    -svar stim_basis 'BLOCK5(12,1)' 'BLOCK5(12,1)' 'BLOCK5(12,1)'              \
+    'BLOCK5(12,1)' 'BLOCK5(12,1)' 'BLOCK5(12,1)' 'BLOCK5(12,1)'                \
+    'BLOCK5(12,1)' 'BLOCK5(12,1)' 'BLOCK5(12,1)' 'BLOCK5(12,1)'                \
+    'BLOCK5(12,1)'                                                             \
+    -svar stim_label Body_run01 Body_run02 Body_run03 Body_run04 Face_run01    \
+    Face_run02 Face_run03 Face_run04 House_run01 House_run02 House_run03       \
+    House_run04                                                                \
+    -svar stim_type times times times times times times times times times      \
+    times times times                                                          \
+    -svar stim_wildcard yes                                                    \
+    -svar tlrc_base MNI_avg152T1+tlrc

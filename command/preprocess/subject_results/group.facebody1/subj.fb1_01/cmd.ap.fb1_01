@@ -1,0 +1,42 @@
+#!/usr/bin/env tcsh
+
+# created by uber_subject.py: version 0.36 (April 5, 2013)
+# creation date: Thu Aug  7 18:02:47 2014
+
+# set data directories
+set top_dir   = /mnt/nfs/psych/facebody01
+set anat_dir  = $top_dir/data/nifti/tb6859
+set epi_dir   = $top_dir/data/nifti/tb6859
+set stim_dir  = $top_dir/command/timing/afni/tb6859
+
+# set subject and group identifiers
+set subj      = fb1_01
+set group_id  = facebody1
+
+# run afni_proc.py to create a single subject processing script
+afni_proc.py -subj_id $subj                                                   \
+        -script proc.$subj -scr_overwrite                                     \
+        -blocks align tlrc volreg blur mask scale regress                     \
+        -copy_anat $anat_dir/tb6859_highres.nii.gz                            \
+        -tcat_remove_first_trs 0                                              \
+        -dsets $epi_dir/tb6859_FaceBody01_run0*.nii.gz                        \
+        -align_opts_aea -cost lpc+ZZ                                          \
+        -tlrc_base MNI_avg152T1+tlrc                                          \
+        -volreg_align_to third                                                \
+        -volreg_align_e2a                                                     \
+        -volreg_tlrc_warp                                                     \
+        -blur_size 3.0                                                        \
+        -regress_stim_times $stim_dir/tb6859_*.1D                             \
+        -regress_stim_labels                                                  \
+            Body_run01 Body_run02 Body_run03 Body_run04 Face_run01 Face_run02 \
+        Face_run03 Face_run04 House_run01 House_run02 House_run03 House_run04 \
+        -regress_basis 'BLOCK5(12,1)'                                         \
+        -regress_censor_motion 0.3                                            \
+        -regress_apply_mot_types demean deriv                                 \
+        -regress_opts_3dD                                                     \
+            -jobs 4                                                           \
+        -regress_make_ideal_sum sum_ideal.1D                                  \
+        -regress_est_blur_epits                                               \
+        -regress_est_blur_errts                                               \
+        -regress_run_clustsim no
+

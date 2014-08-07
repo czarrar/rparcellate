@@ -1,0 +1,15 @@
+-- applying orig view as +orig
+-- tcat: reps is now 147
+-- volreg: base/sub indices are 0, 2
+++ volreg: warp and align to isotropic 2 mm tlrc voxels
+-- masking: group anat = 'MNI_avg152T1+tlrc', exists = 1
+++ updating polort to 2, from run len 294.0 s
+-- will apply motion types: demean, deriv
+-- using default: will not apply EPI Automask
+   (see 'MASKING NOTE' from the -help for details)
+
+--> script is file: proc.fb1_01
+    consider the script execution command: 
+
+      tcsh -xef proc.fb1_01 |& tee output.proc.fb1_01
+
