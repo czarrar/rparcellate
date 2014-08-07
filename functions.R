@@ -39,9 +39,9 @@ split_hemispheres <- function(roi, hdr) {
 
 # Temporally concatenate data from multiple subjects / runs
 temporally_concatenate <- function(in_func_files, in_mask_files, out_func_file, out_mask_file) {
-	require(plyr)
+	suppressMessages(require(plyr))
 	suppressMessages(require(niftir))
-	require(biganalytics)
+	suppressMessages(require(biganalytics))
 
 	n <- length(in_func_files)
 	if (n != length(in_mask_files)) stop("number of func files doesn't equal number of mask files")
@@ -49,36 +49,47 @@ temporally_concatenate <- function(in_func_files, in_mask_files, out_func_file, 
 	# Functionals
 	cat("combining", n, "functionals\n")
 	## collect the dimensions to pre-make the combined functional
-	dims <- sapply(in_func_files, function(fn) read.nifti.header(fn)$dim)
-	nvols <- dims[4,]
-	funcs <- matrix(0, c(prod(dims[1:3,1]), sum(nvols)))
-	masks.sd <- matrix(0, prod(dims[1:3,1]), n)
+	dims        <- sapply(in_func_files, function(fn) read.nifti.header(fn)$dim)
+	nvols       <- dims[4,]
+	funcs       <- matrix(0, prod(dims[1:3,1]), sum(nvols))
+	mask_vars   <- matrix(0, prod(dims[1:3,1]), n)
 	for (i in 1:n) {
 		cat(i, "...", sep="")
 		# read in data
-		func <- read.big.nifti(in_func_files[i])
-		# compute standard deviation (mask)
-		masks.sd[,i] <- colsd(func) > 0
+		func            <- read.big.nifti4d(in_func_files[i])
+        # generate mask from var
+        mask_var        <- colvar(func) > 0
+        mask_vars[,i]   <- mask_var
+        # mask dataset
+        func            <- do.mask(func, mask_var)
+		# scale (mean = 0, sd = 1)
+        scale_fast(func, to.copy=F)
 		# save
-		adj <- sum(nvols[0:(i-1)])
-		time_inds <- (1:nvols[i]) + adj
-		funcs[,time_inds] <- t(func[,])
+		adj             <- sum(nvols[0:(i-1)])
+		tinds           <- (1:nvols[i]) + adj
+		funcs[mask_var,tinds]   <- t(func[,])/sqrt(nvols[i]-1) # variance normalize
+        rm(func); gc(F,T)
 	}
-	dim(funcs) <- c(dims[1:3,1], sum(nvols))
 	cat("\n")
 
 	# Mask
 	cat("combine masks\n")
-	masks.main <- sapply(in_mask_files, read.mask)
-	mask.main <- (rowSums(masks) == n)
-	mask.sd <- rowSums(masks.sds) == n
-	mask <- mask.main & mask.sd
-
+	masks.main  <- sapply(in_mask_files, read.mask)
+	mask.main   <- (rowSums(masks.main) == n)
+	mask.var    <- rowSums(mask_vars) == n
+	mask        <- mask.main & mask.var
+    
+    # Mask and Resize
+    cat("mask and resize\n")
+    funcs[!mask,]   <- 0
+    dim(funcs)  <- c(dims[1:3,1], sum(nvols))
+    
 	# Save
-	cat("save\n")
+	cat("save mask\n")
 	hdr <- read.nifti.header(in_mask_files[[1]])
 	write.nifti(mask, hdr, outfile=out_mask_file, overwrite=T)
-
+    
+    cat("save func\n")
 	hdr$dim <- c(hdr$dim, ncol(funcs))
 	hdr$pixdim <- c(hdr$pixdim, 1)
 	write.nifti(funcs, hdr, outfile=out_func_file, overwrite=T)
