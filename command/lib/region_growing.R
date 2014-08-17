@@ -2,7 +2,7 @@
 library(inline)
 library(RcppArmadillo)
 suppressMessages(library(biganalytics))
-source("functions.R")
+source("/mnt/nfs/psych/rparcellate/command/lib/functions.R")
 
 cat("compiling\n")
 

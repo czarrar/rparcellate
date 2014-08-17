@@ -1,7 +1,5 @@
 suppressMessages(library(niftir))
-source("searchlight_funs.R")
-
-roidir <- "~/Dropbox/Research/yale/rparcellate"
+source("/mnt/nfs/psych/rparcellate/command/lib/searchlight_funs.R")
 
 load_nifti <- function(fn) {
 	img <- read.nifti.image(fn)
