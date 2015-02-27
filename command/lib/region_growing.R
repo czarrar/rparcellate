@@ -345,13 +345,9 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     list(img=peaks_img, all.inds=peak_inds, mask.inds=peak_mask_inds)
 }
 
-region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir=NULL, roi.scale=10000) {
-	if (!is.null(outdir)) {
-		cat("Setup output\n")
-		if (file.exists(outdir)) stop("output directory cannot exist")
-		dir.create(outdir)
-		outfile <- file.path(outdir, "parcellation.nii.gz")
-	}
+region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.scale=10000) {
+	outfile <- file.path(outdir, "parcels.nii.gz")
+    if (file.exists(outfile)) stop("output outdir/parcels.nii.gz cannot exist")
 
 	cat("Read in data\n")
     hdr         <- read.nifti.header(mask_file)
