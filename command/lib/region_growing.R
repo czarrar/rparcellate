@@ -2,7 +2,8 @@
 library(inline)
 library(RcppArmadillo)
 suppressMessages(library(biganalytics))
-source("/mnt/nfs/psych/rparcellate/command/lib/functions.R")
+script.dir <- dirname(sys.frame(1)$ofile)
+source(file.path(script.dir, "functions.R"))
 
 cat("compiling\n")
 
