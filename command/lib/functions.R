@@ -1,5 +1,6 @@
 suppressMessages(library(niftir))
-source("/mnt/nfs/psych/rparcellate/command/lib/searchlight_funs.R")
+script.dir <- dirname(sys.frame(1)$ofile)
+source(file.path(script.dir, "searchlight_funs.R"))
 
 load_nifti <- function(fn) {
 	img <- read.nifti.image(fn)
