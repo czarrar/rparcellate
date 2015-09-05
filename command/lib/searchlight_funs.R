@@ -74,7 +74,7 @@ find_neighbors <- function(mask, nodes=which(mask), include.self=TRUE,
         nei_inds <- nei_inds[mask[nei_inds]]
 		  if (length(nei_inds) < min.nei) nei_inds <- c()
 		  return(nei_inds)
-    }, .progress=progress, .parallel=FALSE)
+    }, .progress=progress, .parallel=FALSE) # parallel actually slows things down
     names(nei_by_node) <- nodes
     #attr(nei_by_node, "offsets") <- offsets
 	 
