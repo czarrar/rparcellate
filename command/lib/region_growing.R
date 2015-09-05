@@ -56,7 +56,8 @@ code <- '
 
 	mat region_ts(node_ts.n_rows, nregions);
 	double nchanges = 1; // Number of changes to node assignment made
-
+  double ci;
+  
 	while (nleft > 0 && nchanges > 0) {
 		nchanges = 0; // Number of changes to node assignment made
 
@@ -93,20 +94,22 @@ code <- '
 	        if (nei_inds.n_elem == 0) continue;
 	        
 	        // since the time-series are normalized, we do a simpler computation 
-	        // to get the correlation between this region and its neighbors
-	        rowvec rn_cors = region_ts.col(ri).t() * node_ts.cols(nei_inds);
+	        // to get the correlation between all regions and the neighbors of this region
+	        mat rn_cors = region_ts.t() * node_ts.cols(nei_inds);
 	        
 	        // determine correlation threshold for joining
 	        max_cor = 0.9 * rn_cors.max();
 	        
-	        // allow a neighboring voxel to join if
-	        // 1. it has a correlation greater than the threshold (`max_cor`)
-	        // 2. the correlation is greater than with any other neighboring region
+          // Loop through each neighboring nodes
 	        for (uword ni=0; ni<nei_inds.n_elem; ni++) {
 	            nei_ind = nei_inds(ni);
-	            if ((rn_cors(ni) > max_cor) && (new_regions(nei_ind) == 0 || rn_cors(ni) > best_cors(nei_ind))) {
+    	        // allow a neighboring voxel to join if
+    	        // - it isnt already assigned and has a correlation greater than the threshold (`max_cor`)
+              // - it has been assigned and is larger than the current best region
+              ci = new_regions(nei_ind)-1; // current region index
+	            if ((rn_cors(ri,ni) > max_cor) && (new_regions(nei_ind) == 0 || rn_cors(ri,ni) > rn_cors(ci,ni))) {
 	                new_regions(nei_ind) = ri + 1;
-	                best_cors(nei_ind) = rn_cors(ni);
+	                best_cors(nei_ind) = rn_cors(ni); // not really being used
 	                nchanges = nchanges + 1;
 	            }
 	        }
