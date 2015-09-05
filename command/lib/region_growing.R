@@ -41,6 +41,8 @@ code <- '
     double max_cor; // Stores maximum correlation of region to neighbors
     arma::uword nei_ind; // Region neighbor index
     
+    double thr  = Rcpp::as<double>(R_thr);
+    
     /**
 	** Calculate
 	**/
@@ -97,7 +99,7 @@ code <- '
 	        rowvec rn_cors = region_ts.col(ri).t() * node_ts.cols(nei_inds);
 	        
 	        // determine correlation threshold for joining
-	        max_cor = 0.9 * rn_cors.max();
+	        max_cor = thr * rn_cors.max();
 	        
 	        // allow a neighboring voxel to join if
 	        // 1. it has a correlation greater than the threshold (`max_cor`)
@@ -128,7 +130,7 @@ code <- '
 '
 
 start_region_growing_worker <- cxxfunction(
-    signature(R_node_ts="numeric", R_list_neis="List", R_regions="numeric", R_nregions="numeric"), 
+    signature(R_node_ts="numeric", R_list_neis="List", R_regions="numeric", R_nregions="numeric", R_thr="numeric"), 
     code, plugin="RcppArmadillo"
 )
 
@@ -153,7 +155,7 @@ code <- '
     uword nvoxs = regions.n_elem;
     uword nregions =  Rcpp::as<uword>(R_nregions);
     
-    int maxiter = 200;
+    int maxiter = Rcpp::as<int>(R_change_niter);
     
     
     /*** CLUSTER ***/
@@ -226,7 +228,7 @@ code <- '
 '
 
 refine_region_growing_worker <- cxxfunction(
-    signature(R_node_ts="numeric", R_list_voxel_neis="List", R_regions="integer", R_nregions="integer"), 
+    signature(R_node_ts="numeric", R_list_voxel_neis="List", R_regions="integer", R_nregions="integer", R_change_niter="integer"), 
     code, plugin="RcppArmadillo"
 )
 
@@ -234,7 +236,7 @@ cat("done compiling\n")
 
 
 #' func should be scaled
-region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
+region_growing <- function(func, starting_nodes, mask, hdr, normalize=T, thr=0.9, change.niter=200) {
     cat("Setup\n")
     mask3d      <- mask
     dim(mask3d) <- hdr$dim
@@ -263,7 +265,7 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
     
     
     cat("Grow regions\n")
-    system.time(regions2 <- start_region_growing_worker(func, lst_neis, regions, nregions))
+    system.time(regions2 <- start_region_growing_worker(func, lst_neis, regions, nregions, thr))
     
     
     # can have some isolates...remove those
@@ -280,11 +282,16 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T) {
     cat("Refine regions\n")
     regions2 <- as.integer(regions2)
     nregions <- as.integer(length(unique(regions2)))
-    system.time(regions3 <- refine_region_growing_worker(func, lst_neis, regions2, nregions))
+    if (change.niter > 0) {
+      system.time(regions3 <- refine_region_growing_worker(func, lst_neis, regions2, nregions, change.niter))
+    } else {
+      regions3 <- regions2
+    }
+    nregions3<- length(unique(regions3[regions3!=0]))
     
     # DONE!
     list(regions=as.vector(regions3), mask=as.vector(mask3d), regions0=as.vector(regions2), 
-    	nregions=nregions)
+    	nregions=nregions3)
 }
 
 reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
@@ -313,8 +320,8 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     # Smooth Results (by 2mm)
     cat("smooth results\n")
     sm_file     <- paste(outprefix, "smooth02mm.nii.gz", sep="_")
-    raw_cmd     <- "3dBlurInMask -input %s -FWHM 2 -mask %s -prefix %s"
-    cmd         <- sprintf(raw_cmd, reho_file, rmask_file, sm_file)
+    raw_cmd     <- "3dBlurInMask -input %s -FWHM %f -mask %s -prefix %s"
+    cmd         <- sprintf(raw_cmd, reho_file, fwhm, rmask_file, sm_file)
     cat(cmd, "\n")
     system(cmd)
     reho_sm     <- read.nifti.image(sm_file)
@@ -345,7 +352,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     list(img=peaks_img, all.inds=peak_inds, mask.inds=peak_mask_inds)
 }
 
-region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.scale=10000) {
+region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.scale=10000, fwhm=2, thr=0.9, change.niter=200) {
 	outfile <- file.path(outdir, "parcels.nii.gz")
     if (file.exists(outfile)) stop("output outdir/parcels.nii.gz cannot exist")
 
@@ -370,8 +377,8 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.s
         func    <- scale(func.all[,mask])
         
         outprefix <- ifelse(is.null(outdir), NULL, sprintf("%s/roi%02i_reho", outdir, i))
-        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=2, outprefix=outprefix)
-        ret     <- region_growing(func, peaks$mask.inds, mask, hdr)
+        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=fwhm, outprefix=outprefix)
+        ret     <- region_growing(func, peaks$mask.inds, mask, hdr, thr=thr, change.niter=change.niter)
         
         if (ret$nregions > roi.scale) warning("nregions > scale: ", ret$nregions, " vs ", roi.scale)
         parcels <- vector("integer", nvoxs)
@@ -393,7 +400,8 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.s
     	inds <- parcels == regions[i]
     	reparcel[inds] <- i
     }
-
+    cat("...", nregions, "total regions\n")
+    
     # if outdir is given, then save the parcels as an image as well
     if (!is.null(outdir)) {
     	cat("Save output\n")
