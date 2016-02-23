@@ -66,30 +66,33 @@ code <- '
 
         // calculate region time-series
         //region_ts.zeros();
+        //printf("test1\\n");
         for (double ri=0; ri < nregions; ri++) {
         	// row mean across region nodes
         	region_ts.col(ri) = arma::mean(node_ts.cols(find(regions == (ri+1))), 1);
         }
         region_ts = arma::normalise(region_ts);
 
-	    for (double ri=0; ri < nregions; ri++) {
+  	    for (double ri=0; ri < nregions; ri++) {
 	        
-	        // nodes/voxels for the given region
-	        uvec region_nodes = find(regions == (ri+1));
-	        
-	        // all possible neighbors to nodes within region
-	        region_neis.zeros();
-			for (uword rni=0; rni<region_nodes.n_elem; rni++) {
-	            // for each loop, get the neighbors for one particular node
-				SEXP ln = list_neis[region_nodes(rni)];
-				uvec node_neis = Rcpp::as<uvec>(ln) - 1;
-				// only add node neis that do not belong to another region
-				for (uword nni=0; nni<node_neis.n_elem; nni++) {
-					if (regions[node_neis(nni)] == 0) {
-						region_neis(node_neis(nni)) = 1;
-					}
-				}
-			}
+          // nodes/voxels for the given region
+          uvec region_nodes = find(regions == (ri+1));
+      
+          // all possible neighbors to nodes within region
+          region_neis.zeros();
+          
+    			for (uword rni=0; rni<region_nodes.n_elem; rni++) {
+    	      // for each loop, get the neighbors for one particular node
+    				SEXP ln = list_neis[region_nodes(rni)];
+    				uvec node_neis = Rcpp::as<uvec>(ln) - 1;
+    				// only add node neis that do not belong to another region
+    				for (uword nni=0; nni<node_neis.n_elem; nni++) {
+    					if (regions[node_neis(nni)] == 0) {
+    						region_neis(node_neis(nni)) = 1;
+    				}
+    			}
+    		}
+      
 	        // get indices of region neighbors
 	        uvec nei_inds = find(region_neis == 1);
 	        
@@ -127,7 +130,7 @@ code <- '
     	}
 		
 		//printf("nleft -> %i\\n", nleft);
-    	//printf("changes -> %.0f\\n", nchanges);
+    //printf("changes -> %.0f\\n", nchanges);
     }
 
     return Rcpp::wrap(new_regions);
@@ -244,33 +247,50 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T, thr=0.9
     cat("Setup\n")
     mask3d      <- mask
     dim(mask3d) <- hdr$dim
-	nnodes      <- ncol(func)
-	ntpts		<- nrow(func)
-	nregions    <- as.double(length(starting_nodes))
-	regions	    <- vector("numeric", nnodes)
+    nnodes      <- ncol(func)
+	  ntpts		<- nrow(func)
+	  nregions    <- as.double(length(starting_nodes))
+	  regions	    <- vector("numeric", nnodes)
     if (normalize) func <- func/sqrt(ntpts-1)
     
     
     cat("Initialize regions\n")
-	# Nodes with surrounding nodes within a radius of 1.5 times the voxel size
-	start_neis 	<- find_neighbors_masked(mask3d, starting_nodes, 
+	  # Nodes with surrounding nodes within a radius of 1.5 times the voxel size
+	  start_neis 	<- find_neighbors_masked(mask3d, starting_nodes, 
 										 nei=1, nei.dist=1.5, 
 										 verbose=FALSE)
-	for (ri in 1:nregions) {
-		neis <- start_neis[[ri]]
-        regions[neis] <- ri
-	}
+    for (ri in 1:nregions) {
+    	neis <- start_neis[[ri]]
+          regions[neis] <- ri
+    }
     regions <- as.double(regions)
     
     
     cat("Compile neighbors\n")
     # for each node get nearest neighbors (exclude self)
-	lst_neis <- find_neighbors_masked(mask3d, include.self=F, verbose=F)
+	  lst_neis <- find_neighbors_masked(mask3d, include.self=F, verbose=F)
     
     
     cat("Grow regions\n")
     system.time(regions2 <- start_region_growing_worker(func, lst_neis, regions, nregions, thr))
     
+    # lower the threshold if any isolates to allow whatever is closest
+    isolates <- regions2==0
+    if (any(isolates)) {
+      cat("Growing isolates:", sum(isolates), "\n")
+      regions2 <- as.double(regions2)
+      nregions <- as.integer(length(unique(regions2[!isolates])))
+      system.time(regions2 <- start_region_growing_worker(func, lst_neis, regions2, nregions, 0.5*thr))
+    }
+    
+    # lower the threshold if any isolates to allow whatever is closest
+    isolates <- regions2==0
+    if (any(isolates)) {
+      cat("Growing isolates:", sum(isolates), "\n")
+      regions2 <- as.double(regions2)
+      nregions <- as.integer(length(unique(regions2[!isolates])))
+      system.time(regions2 <- start_region_growing_worker(func, lst_neis, regions2, nregions, 0.0))
+    }
     
     # can have some isolates...remove those
     isolates <- regions2==0
@@ -283,10 +303,10 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T, thr=0.9
     }
     
     
-    cat("Refine regions\n")
     regions2 <- as.integer(regions2)
     nregions <- as.integer(length(unique(regions2)))
     if (change.niter > 0) {
+      cat("Refine regions\n")
       system.time(regions3 <- refine_region_growing_worker(func, lst_neis, regions2, nregions, change.niter))
     } else {
       regions3 <- regions2
@@ -298,7 +318,7 @@ region_growing <- function(func, starting_nodes, mask, hdr, normalize=T, thr=0.9
     	nregions=nregions3)
 }
 
-reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
+reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL, percent_neighbors=0.5, afnipath=NULL) {
     #  outprefix NULL then create a temp directory
     
     mask3d          <- mask
@@ -314,7 +334,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
 
     cat("running rmse reho\n")
     reho_file       <- paste(outprefix, "map.nii.gz", sep="_")
-    func.rmse       <- reho.rmse(func, mask3d, percent_neighbors=1)
+    func.rmse       <- reho.rmse(func, mask3d, percent_neighbors=percent_neighbors)
     write.nifti(func.rmse, hdr, mask, outfile=reho_file) # don't have this allow anything
 
     # new mask since not every voxel will have an output
@@ -326,6 +346,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     sm_file     <- paste(outprefix, "smooth02mm.nii.gz", sep="_")
     raw_cmd     <- "3dBlurInMask -input %s -FWHM %f -mask %s -prefix %s"
     cmd         <- sprintf(raw_cmd, reho_file, fwhm, rmask_file, sm_file)
+    if (!is.null(afnipath)) cmd <- sprintf("%s/%s", afnipath, cmd)
     cat(cmd, "\n")
     system(cmd)
     reho_sm     <- read.nifti.image(sm_file)
@@ -338,6 +359,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     peak_file2  <- paste(outprefix, "smooth02mm_peaks.txt", sep="_")
     raw_cmd     <- "3dExtrema -minima -volume -closure -mask_file %s -output %s %s 1> %s"
     cmd         <- sprintf(raw_cmd, rmask_file, peak_file1, sm_file, peak_file2)
+    if (!is.null(afnipath)) cmd <- sprintf("%s/%s", afnipath, cmd)
     cat(cmd, "\n")
     system(cmd)
 
@@ -356,7 +378,7 @@ reho_peak_detection <- function(func, mask, hdr, fwhm=2, outprefix=NULL) {
     list(img=peaks_img, all.inds=peak_inds, mask.inds=peak_mask_inds)
 }
 
-region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.scale=10000, fwhm=2, thr=0.9, change.niter=200) {
+region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.scale=10000, fwhm=2, thr=0.9, change.niter=200, percent_neighbors=0.5) {
 	outfile <- file.path(outdir, "parcels.nii.gz")
     if (file.exists(outfile)) stop("output outdir/parcels.nii.gz cannot exist")
 
@@ -381,14 +403,14 @@ region_growing_wrapper <- function(func_file, mask_file, roi_file, outdir, roi.s
         func    <- scale(func.all[,mask])
         
         outprefix <- ifelse(is.null(outdir), NULL, sprintf("%s/roi%02i_reho", outdir, i))
-        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=fwhm, outprefix=outprefix)
+        peaks   <- reho_peak_detection(func, mask, hdr, fwhm=fwhm, outprefix=outprefix, percent_neighbors=percent_neighbors)
         ret     <- region_growing(func, peaks$mask.inds, mask, hdr, thr=thr, change.niter=change.niter)
         
         if (ret$nregions > roi.scale) warning("nregions > scale: ", ret$nregions, " vs ", roi.scale)
         parcels <- vector("integer", nvoxs)
         parcels[ret$mask] <- ret$regions + i*roi.scale
         
-    	cat("====\n")
+    	  cat("====\n")
         parcels
     })
     

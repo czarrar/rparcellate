@@ -145,6 +145,7 @@ find_neighbors_masked <- function(mask, nodes=1:sum(mask), ...) {
 #' @params process_nodes nodes within the whole image to examine (assumed that this is a subset of mask)
 #' @params include_self for each searchlight, do you include the principal or center node
 #' @params percent_neighbors the proportion of neighboring nodes that must exist (default=0.5)
+#' @params sphere_radius the radius in voxels of each searchlight sphere (default=1)
 #' @params progress what type of progress information to display (default=text)
 #' @params parallel apply operations in parallel (default=False)
 #'
@@ -153,11 +154,13 @@ find_neighbors_masked <- function(mask, nodes=1:sum(mask), ...) {
 #' @return vector
 searchlight <- function(fun, data, mask, process_nodes=which(mask), 
                         include_self=TRUE, percent_neighbors=0.25, 
-                        progress="text", parallel=FALSE, ...) 
+                        sphere_radius=1, progress="text", parallel=FALSE, ...) 
 {
     # Find the neighbors for each node within your mask
     neis_by_node0   <- find_neighbors(mask, nodes=process_nodes, 
                                       include.self=include_self, 
+                                      nei=sphere_radius, 
+                                      nei.dist=sphere_radius+1, 
                                       thr.nei=percent_neighbors)
     neis_by_node    <- neighbors_array2mask(neis_by_node0, as.vector(mask))
     
@@ -166,11 +169,40 @@ searchlight <- function(fun, data, mask, process_nodes=which(mask),
         if (length(neis) == 0) {
             return(0)
         } else {
-            return(fun(data[,neis], ...))
+            return(fun(data[,neis,drop=F], ...))
         }
     }, .progress=progress, .parallel=parallel)
     
     return(sl_res)
+}
+
+# note: data must already have been masked if mask_data=F
+searchlight_spatial <- function(fun, data, mask, process_nodes=which(mask), 
+                                include_self=TRUE, percent_neighbors=0.25, 
+                                sphere_radius=1, mask_data=T, 
+                                progress="text", parallel=FALSE, ...) 
+{
+  # Find the neighbors for each node within your mask
+  neis_by_node0   <- find_neighbors(mask, nodes=process_nodes, 
+                                    include.self=include_self, 
+                                    nei=sphere_radius, 
+                                    nei.dist=sphere_radius+1, 
+                                    thr.nei=percent_neighbors)
+  neis_by_node    <- neighbors_array2mask(neis_by_node0, as.vector(mask))
+  
+  # Mask data
+  if (mask_data) data <- data[mask]
+  
+  # Apply function
+  sl_res <- laply(neis_by_node, function(neis) {
+    if (length(neis) == 0) {
+      return(0)
+    } else {
+      return(fun(data[neis], ...))
+    }
+  }, .progress=progress, .parallel=parallel)
+  
+  return(sl_res)
 }
 
 # reho function
